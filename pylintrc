@@ -1,3 +1,6 @@
+[TYPECHECK]
+extension-pkg-allow-list=kenlm
+
 [MESSAGES CONTROL]
 disable=
   format,

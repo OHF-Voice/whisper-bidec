@@ -1,0 +1,4 @@
+"""Constants."""
+
+DEFAULT_NGRAM_ORDER = 5
+DEFAULT_UNK_LOGPROB = -5

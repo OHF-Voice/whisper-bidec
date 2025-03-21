@@ -1,0 +1,9 @@
+<eps> 0
+the 1
+cat 2
+sat 3
+dog 4
+barked 5
+at 6
+TV 7
+on 8

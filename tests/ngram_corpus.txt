@@ -1,0 +1,5 @@
+the cat sat
+the dog sat
+the dog barked
+the dog barked at the TV
+the cat sat on the TV
