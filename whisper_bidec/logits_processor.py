@@ -1,6 +1,7 @@
 """Custom logits processor using KenLM to bias scores."""
 
 import math
+from functools import lru_cache
 from typing import Optional
 
 import kenlm
@@ -27,7 +28,7 @@ class KenLMLogitsProcessor(LogitsProcessor):
         super().__init__()
 
         self.lm = lm
-        self.bias = min(1, max(0, bias_towards_lm))
+        self.bias = bias_towards_lm
         self.processor = processor
 
         # token string -> token id
@@ -72,26 +73,11 @@ class KenLMLogitsProcessor(LogitsProcessor):
                 if t_id not in self.special_token_ids
             )
 
-            # TODO: cache
-            state = kenlm.State()
-            prob = 0.0
-            self.lm.BeginSentenceWrite(state)
-            for token_id in current_token_ids:
-                token_str = self.id_to_token.get(token_id)
-                if token_str is None:
-                    token_str = f"w_{token_id}"
-                    if token_str in self.vocab_to_id:
-                        self.id_to_token[token_id] = token_str
-                    else:
-                        token_str = UNK
-                        self.id_to_token[token_id] = UNK
+            state, prob = self._get_state_and_prob(current_token_ids)
 
-                next_state = kenlm.State()
-                prob += self.lm.BaseScore(state, token_str, next_state) * LOG10_TO_E
-                state = next_state
-
+            # Compute log probabilities for tokens in the vocabulary
             vocab_log_probs: list[float] = []
-            for token_str, token_id in self.vocab_to_id_sorted:
+            for token_str, _token_id in self.vocab_to_id_sorted:
                 next_state = kenlm.State()
                 next_prob = prob + (
                     self.lm.BaseScore(state, token_str, next_state) * LOG10_TO_E
@@ -110,3 +96,32 @@ class KenLMLogitsProcessor(LogitsProcessor):
             scores[batch_idx, self.vocab_mask] += biased_vocab_probs
 
         return scores
+
+    @lru_cache
+    def _get_state_and_prob(
+        self, token_ids: tuple[int, ...]
+    ) -> tuple[kenlm.State, float]:
+        """Get state/probability for token ids (LRU cache)."""
+        if not token_ids:
+            state = kenlm.State()
+            prob = 0.0
+            self.lm.BeginSentenceWrite(state)
+            return (state, prob)
+
+        state, prob = self._get_state_and_prob(token_ids[:-1])
+
+        for token_id in token_ids:
+            token_str = self.id_to_token.get(token_id)
+            if token_str is None:
+                token_str = f"w_{token_id}"
+                if token_str in self.vocab_to_id:
+                    self.id_to_token[token_id] = token_str
+                else:
+                    token_str = UNK
+                    self.id_to_token[token_id] = UNK
+
+            next_state = kenlm.State()
+            prob += self.lm.BaseScore(state, token_str, next_state) * LOG10_TO_E
+            state = next_state
+
+        return state, prob

@@ -1,6 +1,7 @@
 # Whisper BiDec
 
 **Bi**ased **Dec**oding for Whisper speech-to-text.
+The goal is to recognize unusual names or phrases with smaller Whisper models and lower beam sizes.
 
 This repository implements a custom `LogitsProcessor` for [HuggingFace's implementation][hf_whisper] of the [OpenAI Whisper model][openai_whisper] which uses [KenLM][kenlm] for word probabilities.
 
@@ -40,7 +41,7 @@ When computing the language model probabilities, tokens outside of the example s
 Some thoughts on the method:
 
 * Witten-Bell smoothing seems to do the best, but there may be better methods. Additionally, the implementation of it was mostly written by ChatGPT so it hasn't been fully verified.
-* Casing is a problem right now since Whisper wants to output case-sensitive sentences. It may be worth considering tokens that only differ in case as identical.
+* Casing is a problem right now since Whisper wants to output case-sensitive sentences. It may be worth considering tokens that only differ in case as identical in the language model.
 
 [hf_whisper]: https://huggingface.co/docs/transformers/model_doc/whisper
 [openai_whisper]: https://github.com/openai/whisper
