@@ -1,13 +1,16 @@
 """Custom logits processor using KenLM to bias scores."""
 
+import math
 from typing import Optional
 
 import kenlm
 import torch
-from torch.nn.functional import log_softmax
+from torch.nn.functional import log_softmax, softmax
 from transformers import LogitsProcessor, WhisperProcessor
 
 from .ngram import UNK
+
+LOG10_TO_E = math.log(10)
 
 
 class KenLMLogitsProcessor(LogitsProcessor):
@@ -41,13 +44,14 @@ class KenLMLogitsProcessor(LogitsProcessor):
 
     def __call__(self, input_ids: torch.Tensor, scores: torch.Tensor):
         """Bias scores towards language model."""
-        # Convert to log probabilities
-        scores = log_softmax(scores, dim=-1)
+        # Convert to probabilities
+        scores = softmax(scores, dim=-1)
 
         if self.vocab_mask is None:
             # Initialize mask with only vocabulary token ids
             self.vocab_mask = torch.tensor(
-                [(t_id in self.vocab_ids) for t_id in range(scores.shape[-1])]
+                [(t_id in self.vocab_ids) for t_id in range(scores.shape[-1])],
+                device=scores.device,
             )
 
         if self.unknown_token_mask is None:
@@ -57,7 +61,8 @@ class KenLMLogitsProcessor(LogitsProcessor):
                     (t_id not in self.special_token_ids)
                     and (t_id not in self.vocab_ids)
                     for t_id in range(scores.shape[-1])
-                ]
+                ],
+                device=scores.device,
             )
 
         for batch_idx in range(len(input_ids)):
@@ -82,29 +87,26 @@ class KenLMLogitsProcessor(LogitsProcessor):
                         self.id_to_token[token_id] = UNK
 
                 next_state = kenlm.State()
-                prob += self.lm.BaseScore(state, token_str, next_state)
+                prob += self.lm.BaseScore(state, token_str, next_state) * LOG10_TO_E
                 state = next_state
 
-            # Get probability of next state being unknown
-            next_unk_state = kenlm.State()
-            next_unk_prob = prob + self.lm.BaseScore(state, UNK, next_unk_state)
-            scores[batch_idx, self.unknown_token_mask] = (
-                scores[batch_idx, self.unknown_token_mask] * (1 - self.bias)
-            ) + (next_unk_prob * self.bias)
-
-            vocab_probs: list[float] = []
+            vocab_log_probs: list[float] = []
             for token_str, token_id in self.vocab_to_id_sorted:
                 next_state = kenlm.State()
-                next_prob = prob + self.lm.BaseScore(state, token_str, next_state)
-                combined_score = (scores[batch_idx, token_id] * (1.0 - self.bias)) + (
-                    next_prob * self.bias
+                next_prob = prob + (
+                    self.lm.BaseScore(state, token_str, next_state) * LOG10_TO_E
                 )
-                vocab_probs.append(combined_score)
+                vocab_log_probs.append(next_prob)
 
-            scores[batch_idx, self.vocab_mask] = torch.FloatTensor(
-                vocab_probs, device=scores.device
+            biased_vocab_probs = (
+                torch.exp(
+                    log_softmax(
+                        torch.tensor(vocab_log_probs, device=scores.device), dim=-1
+                    )
+                )
+                * self.bias
             )
 
-        # TODO: renormalize?
+            scores[batch_idx, self.vocab_mask] += biased_vocab_probs
 
         return scores

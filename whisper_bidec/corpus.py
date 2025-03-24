@@ -1,6 +1,7 @@
 """Utilities for loading and tokenizing a text corpus."""
 
 import logging
+import string
 import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -74,7 +75,12 @@ def tokenize_sentence(
     token_ids = processor.tokenizer.encode(f" {sentence}", add_special_tokens=False)
     tokens: list[str] = []
     for token_id in token_ids:
+        if processor.tokenizer.decode(token_id) in string.punctuation:
+            # Skip punctuation
+            continue
+
         token_str = corpus.id_to_token.get(token_id)
+
         if token_str is None:
             token_str = f"w_{token_id}"
             corpus.id_to_token[token_id] = token_str

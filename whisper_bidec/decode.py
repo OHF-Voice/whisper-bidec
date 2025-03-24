@@ -46,7 +46,7 @@ def decode_wav(
 
     audio_int16 = np.frombuffer(audio_bytes, dtype=np.int16)
     audio_float = audio_int16.astype(np.float32) / 32768.0
-    audio_tensor = torch.FloatTensor(audio_float, device=model.device)
+    audio_tensor = torch.tensor(audio_float, device=model.device)
 
     return decode_audio(
         model,
