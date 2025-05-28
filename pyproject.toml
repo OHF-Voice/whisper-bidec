@@ -40,7 +40,7 @@ dev = [
 ]
 
 [project.urls]
-"Source Code" = "http://github.com/home-assistant/hassil"
+"Source Code" = "http://github.com/OHF-voice/whisper-bidec"
 
 [tool.setuptools]
 platforms = ["any"]
